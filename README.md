@@ -1,2 +1,2 @@
 # HC_raman
-Processing hard carbon raman data
+Python package for processing Raman spectroscopy data of hard carbon samples to extract Id/Ig
