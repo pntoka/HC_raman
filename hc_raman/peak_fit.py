@@ -1,10 +1,41 @@
 import os
 import numpy as np
-from baseline import airpls_baseline, iasls_baseline, nn_baseline, interpolate_data
+from hc_raman.baseline import airpls_baseline, iasls_baseline, nn_baseline, interpolate_data, Convclassifica
 import tomllib
 from lmfit.models import LorentzianModel, GaussianModel
-from preprocess import preprocess_raman_data
+from hc_raman.preprocess import preprocess_raman_data
+import torch
+import torch.nn as nn
 
+class Convclassifica(nn.Module):
+    def __init__(self):
+        super(Convclassifica, self).__init__()
+        self.hidden1 = nn.Sequential(
+            nn.Conv1d(
+                in_channels=1,
+                out_channels=16,
+                kernel_size=5,
+                stride=1,
+            ),
+            nn.ReLU(),
+            nn.AvgPool1d(kernel_size=2, stride=2),
+        )
+        self.hidden2 = nn.Sequential(
+            nn.Linear(
+                in_features=17568,
+                out_features=100,
+                bias=True,
+            ),
+            nn.ReLU(),
+        )
+        self.classifica = nn.Sequential(nn.Linear(100, 3), nn.Sigmoid())
+
+    def forward(self, x):
+        fc1 = self.hidden1(x)
+        fc1 = fc1.reshape(fc1.size(0), -1)
+        fc2 = self.hidden2(fc1)
+        output = self.classifica(fc2)
+        return output
 
 def get_peaks_config():
     with open(
@@ -48,7 +79,7 @@ def fit_model(x_data, y_data, mode="5peaks"):
 
 def get_spectrum_region():
     with open(
-        os.path.join(os.path.dirname(__file__), "spectrum_config/spectrum_region.toml"),
+        os.path.join(os.path.dirname(__file__), "spectrum_config/spectrum_regions.toml"),
         "rb",
     ) as file:
         spectrum_region = tomllib.load(file)
@@ -64,12 +95,32 @@ def filter_normalize_data(file_path, window_length=11, polyorder=3):
     return x_data, y_data
 
 
+def baseline_analysis(
+        file_path, baseline, window_length=11, polyorder=3,
+        lam=10e6, p=1e-2, size=2200, iter=10
+):
+    assert baseline in ["airpls", "iasls", "nn"]
+    x_data, y_data = filter_normalize_data(file_path, window_length, polyorder)
+
+    if baseline == "airpls":
+        return x_data, y_data, airpls_baseline(y_data, lam=lam)
+    elif baseline == "iasls":
+        return x_data, y_data, iasls_baseline(y_data, lam=lam, p=p)
+    elif baseline == "nn":
+        new_x_data, new_y_data = interpolate_data(x_data, y_data, size=size)
+        return x_data, new_y_data, nn_baseline(
+            new_x_data, y_data, size=size, iter=iter
+        )
+
+
 def baseline_substraction(
     baseline, x_data, y_data, lam=10e6, p=1e-2, size=2200, iter=10
 ):
     """
     Substract the baseline from the Raman data.
     """
+    assert baseline in ["airpls", "iasls", "nn"]
+
     if baseline == "airpls":
         y_data_substracted = y_data - airpls_baseline(y_data, lam=lam)
     elif baseline == "iasls":
@@ -130,7 +181,7 @@ def peak_fit(
     mode="5peaks",
 ):
     """
-    Fit the peaks to the Raman spectrum.
+    Fit the peaks to the Raman spectrum with a chosen baseline
     """
     x_data, y_data = prepare_data(
         file_path, baseline, window_length, polyorder, lam, p, size, iter, region

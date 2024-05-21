@@ -111,6 +111,11 @@ class Convclassifica(nn.Module):
         return output
 
 
+def load_nn_model():
+    model = torch.load(os.path.join(os.path.dirname(__file__), "NNmodel.pkl"))
+    return model
+
+
 def comp(a, b):
     if a == 1 and b >= 0.4:
         return 1
@@ -189,7 +194,7 @@ def iterative_fitting(sp, ite):
     tempb = sp
     torch_tempb = torch.Tensor(tempb.reshape(1, 1, 2200))
     i = 0
-    mynet = torch.load(os.path.join(os.path.dirname(__file__), "NNmodel.pkl"))
+    mynet = load_nn_model()
     while i < ite:
         tadvice = mynet(torch_tempb)
         # print(tadvice)

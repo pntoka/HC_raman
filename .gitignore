@@ -1,1 +1,8 @@
 .DS_Store
+*.pyc
+hc_raman.egg-info/top_level.txt
+hc_raman.egg-info/SOURCES.txt
+hc_raman.egg-info/requires.txt
+hc_raman.egg-info/PKG-INFO
+hc_raman.egg-info/dependency_links.txt
+/build/*
