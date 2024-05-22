@@ -49,7 +49,7 @@ def iasls_baseline(x_data, y_data, lam=10e6, p=1e-2):
         Baseline corrected data.
     """
     # Apply the iasPLS baseline correction
-    baseline = iasls(x_data, y_data, lam=lam, p=p)
+    baseline = iasls(y_data, x_data, lam=lam, p=p)
     return baseline[0]
 
 

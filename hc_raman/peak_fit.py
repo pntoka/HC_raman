@@ -6,6 +6,7 @@ from lmfit.models import LorentzianModel, GaussianModel
 from hc_raman.preprocess import preprocess_raman_data
 import torch
 import torch.nn as nn
+import matplotlib.pyplot as plt
 
 class Convclassifica(nn.Module):
     def __init__(self):
@@ -37,6 +38,7 @@ class Convclassifica(nn.Module):
         output = self.classifica(fc2)
         return output
 
+
 def get_peaks_config():
     with open(
         os.path.join(os.path.dirname(__file__), "spectrum_config/peaks_config.toml"),
@@ -46,19 +48,19 @@ def get_peaks_config():
     return peaks_config
 
 
-def build_lmfit_model(mode="5peaks"):
+def build_lmfit_model(mode="5peaks", region="first_order"):
     peaks_config = get_peaks_config()
-    peaks = peaks_config["first_order"]["models"][mode].split("+")
+    peaks = peaks_config[region]["models"][mode].split("+")
     model_list = []
     for peak in peaks:
         peak_model = eval(
-            peaks_config["first_order"]["peaks"][peak]["peak_type"]
+            peaks_config[region]["peaks"][peak]["peak_type"]
             + f"Model(prefix='{peak}_')"
         )
-        for hint in peaks_config["first_order"]["peaks"][peak]["param_hints"]:
+        for hint in peaks_config[region]["peaks"][peak]["param_hints"]:
             peak_model.set_param_hint(
                 f"{peak}_{hint}",
-                **peaks_config["first_order"]["peaks"][peak]["param_hints"][hint],
+                **peaks_config[region]["peaks"][peak]["param_hints"][hint],
             )
         model_list.append(peak_model)
     model = model_list[0]
@@ -68,11 +70,11 @@ def build_lmfit_model(mode="5peaks"):
     return model, params
 
 
-def fit_model(x_data, y_data, mode="5peaks"):
+def fit_model(x_data, y_data, mode="5peaks", region="first_order"):
     """
     Fit the peaks to the Raman spectrum.
     """
-    model, params = build_lmfit_model(mode)
+    model, params = build_lmfit_model(mode, region)
     result = model.fit(y_data, params, x=x_data)
     return result
 
@@ -105,11 +107,11 @@ def baseline_analysis(
     if baseline == "airpls":
         return x_data, y_data, airpls_baseline(y_data, lam=lam)
     elif baseline == "iasls":
-        return x_data, y_data, iasls_baseline(y_data, lam=lam, p=p)
+        return x_data, y_data, iasls_baseline(x_data, y_data, lam=lam, p=p)
     elif baseline == "nn":
         new_x_data, new_y_data = interpolate_data(x_data, y_data, size=size)
-        return x_data, new_y_data, nn_baseline(
-            new_x_data, y_data, size=size, iter=iter
+        return new_x_data, new_y_data, nn_baseline(
+            x_data, y_data, size=size, iter=iter
         )
 
 
@@ -124,7 +126,7 @@ def baseline_substraction(
     if baseline == "airpls":
         y_data_substracted = y_data - airpls_baseline(y_data, lam=lam)
     elif baseline == "iasls":
-        y_data_substracted = y_data - iasls_baseline(y_data, lam=lam, p=p)
+        y_data_substracted = y_data - iasls_baseline(x_data, y_data, lam=lam, p=p)
     elif baseline == "nn":
         _, new_y_data = interpolate_data(x_data, y_data, size=size)
         y_data_substracted = new_y_data - nn_baseline(
@@ -179,6 +181,7 @@ def peak_fit(
     iter=10,
     region="first_order",
     mode="5peaks",
+    plot=False
 ):
     """
     Fit the peaks to the Raman spectrum with a chosen baseline
@@ -186,5 +189,87 @@ def peak_fit(
     x_data, y_data = prepare_data(
         file_path, baseline, window_length, polyorder, lam, p, size, iter, region
     )
-    result = fit_model(x_data, y_data, mode)
+    result = fit_model(x_data, y_data, mode, region)
+    results_dict = result.params.valuesdict()
+    id_ig = results_dict["D_height"] / results_dict["G_height"]
+    if plot:
+        results_dict = result.params.valuesdict()
+        id_ig = results_dict["D_height"] / results_dict["G_height"]
+        comps = result.eval_components(x=x_data)
+        peaks_config = get_peaks_config()
+        peaks = peaks_config[region]["models"][mode].split("+")
+        textstr = f"$I_D/I_G$ = {id_ig:.3f} \n R$^2$ = {result.rsquared:.4f}"
+        props = dict(boxstyle='round', facecolor='gainsboro', alpha=0.5)
+        fig, ax = plt.subplots()
+        for peak in peaks:
+            ax.plot(x_data, comps[f'{peak}_'], linestyle='--', label=peak)
+        ax.scatter(x_data, y_data, c='k', label="raw data", s=1)
+        ax.plot(x_data, result.best_fit, label="fit", linestyle='-', c='r')
+        ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
+        ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
+        ax.set_title(os.path.basename(file_path))
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+        ax.legend()
+        plt.show()
+        return fig, ax, result
+
+    return result
+
+
+def get_id_ig(result):
+    results_dict = result.params.valuesdict()
+    id_ig = results_dict["D_height"] / results_dict["G_height"]
+    return id_ig
+
+
+def auto_peak_fit(
+    file_path,
+    baseline=None,
+    window_length=11,
+    polyorder=3,
+    lam=10e6,
+    p=1e-2,
+    size=2200,
+    iter=10,
+    region="first_order",
+    mode="5peaks",
+    plot=False
+):
+    """
+    Fit the peaks to the Raman spectrum with a airpls baseline or iasls baseline if smaller data
+    """
+    x_data, _ = filter_normalize_data(file_path, window_length, polyorder)
+    if baseline is None and x_data.max() < 2200:
+        baseline = "iasls"
+    elif baseline is None and x_data.max() > 2200:
+        baseline = "airpls"
+    x_data, y_data = prepare_data(
+        file_path, baseline, window_length, polyorder, lam, p, size, iter, region
+    )
+    result = fit_model(x_data, y_data, mode, region)
+    results_dict = result.params.valuesdict()
+    id_ig = results_dict["D_height"] / results_dict["G_height"]
+    if plot:
+        results_dict = result.params.valuesdict()
+        id_ig = results_dict["D_height"] / results_dict["G_height"]
+        comps = result.eval_components(x=x_data)
+        peaks_config = get_peaks_config()
+        peaks = peaks_config[region]["models"][mode].split("+")
+        textstr = f"$I_D/I_G$ = {id_ig:.3f} \n R$^2$ = {result.rsquared:.4f}"
+        props = dict(boxstyle='round', facecolor='gainsboro', alpha=0.5)
+        fig, ax = plt.subplots()
+        for peak in peaks:
+            ax.plot(x_data, comps[f'{peak}_'], linestyle='--', label=peak)
+        ax.scatter(x_data, y_data, c='k', label="raw data", s=1)
+        ax.plot(x_data, result.best_fit, label="fit", linestyle='-', c='r')
+        ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
+        ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
+        ax.set_title(os.path.basename(file_path))
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+        ax.legend()
+        plt.show()
+        return fig, ax, result
+
     return result
