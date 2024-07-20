@@ -1,9 +1,10 @@
 import os
 import numpy as np
+from hc_raman.utils import get_spectrum_region
 from hc_raman.baseline import airpls_baseline, iasls_baseline, nn_baseline, interpolate_data, Convclassifica
 import tomllib
 from lmfit.models import LorentzianModel, GaussianModel
-from hc_raman.preprocess import preprocess_raman_data
+from hc_raman.preprocess import preprocess_raman_data, new_preprocess
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -78,14 +79,6 @@ def fit_model(x_data, y_data, mode="5peaks", region="first_order"):
     result = model.fit(y_data, params, x=x_data)
     return result
 
-
-def get_spectrum_region():
-    with open(
-        os.path.join(os.path.dirname(__file__), "spectrum_config/spectrum_regions.toml"),
-        "rb",
-    ) as file:
-        spectrum_region = tomllib.load(file)
-    return spectrum_region
 
 
 def filter_normalize_data(file_path, window_length=11, polyorder=3):
@@ -170,7 +163,7 @@ def prepare_data(
     return x_data_region, y_data_region
 
 
-def peak_fit(
+def peak_fit_old(
     file_path,
     baseline,
     window_length=11,
@@ -223,7 +216,7 @@ def get_id_ig(result):
     return id_ig
 
 
-def auto_peak_fit(
+def auto_peak_fit_old(
     file_path,
     baseline=None,
     window_length=11,
@@ -266,6 +259,88 @@ def auto_peak_fit(
         ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
         ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
         ax.set_title(os.path.basename(file_path))
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+        ax.legend()
+        plt.show()
+        return fig, ax, result
+
+    return result
+
+
+def peak_fit_from_file(
+    file_path, 
+    baseline='iasls',
+    window_length=11,
+    polyorder=3, 
+    region="first_order",
+    mode="5peaks",
+    plot=False
+):
+    '''Fit peaks to Raman spectrum from file using RamanSPy for preprocessing the data'''
+
+    x_data, y_data = new_preprocess(file_path=file_path, baseline=baseline, region=region,
+                                    window_length=window_length, polyorder=polyorder)
+    result = fit_model(x_data, y_data, mode, region)
+    results_dict = result.params.valuesdict()
+    id_ig = results_dict["D_height"] / results_dict["G_height"]
+    if plot:
+        results_dict = result.params.valuesdict()
+        id_ig = results_dict["D_height"] / results_dict["G_height"]
+        comps = result.eval_components(x=x_data)
+        peaks_config = get_peaks_config()
+        peaks = peaks_config[region]["models"][mode].split("+")
+        textstr = f"$I_D/I_G$ = {id_ig:.3f} \n R$^2$ = {result.rsquared:.4f}"
+        props = dict(boxstyle='round', facecolor='gainsboro', alpha=0.5)
+        fig, ax = plt.subplots()
+        for peak in peaks:
+            ax.plot(x_data, comps[f'{peak}_'], linestyle='--', label=peak)
+        ax.scatter(x_data, y_data, c='k', label="raw data", s=1)
+        ax.plot(x_data, result.best_fit, label="fit", linestyle='-', c='r')
+        ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
+        ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
+        ax.set_title(os.path.basename(file_path))
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+        ax.legend()
+        plt.show()
+        return fig, ax, result
+
+    return result
+
+
+def peak_fit_from_data(
+    wavenumber,
+    intensity,    
+    baseline='iasls',
+    window_length=11,
+    polyorder=3, 
+    region="first_order",
+    mode="5peaks",
+    plot=False
+):
+    '''Fit peaks to Raman spectrum from arrays with data using RamanSPy for preprocessing the data'''
+    x_data, y_data = new_preprocess(wavenumber=wavenumber,intensity=intensity, baseline=baseline, region=region,
+                                    window_length=window_length, polyorder=polyorder)
+    result = fit_model(x_data, y_data, mode, region)
+    results_dict = result.params.valuesdict()
+    id_ig = results_dict["D_height"] / results_dict["G_height"]
+    if plot:
+        results_dict = result.params.valuesdict()
+        id_ig = results_dict["D_height"] / results_dict["G_height"]
+        comps = result.eval_components(x=x_data)
+        peaks_config = get_peaks_config()
+        peaks = peaks_config[region]["models"][mode].split("+")
+        textstr = f"$I_D/I_G$ = {id_ig:.3f} \n R$^2$ = {result.rsquared:.4f}"
+        props = dict(boxstyle='round', facecolor='gainsboro', alpha=0.5)
+        fig, ax = plt.subplots()
+        for peak in peaks:
+            ax.plot(x_data, comps[f'{peak}_'], linestyle='--', label=peak)
+        ax.scatter(x_data, y_data, c='k', label="raw data", s=1)
+        ax.plot(x_data, result.best_fit, label="fit", linestyle='-', c='r')
+        ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
+        ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
+        ax.set_title('Raman spectrum')
         ax.tick_params(axis='both', which='major', labelsize=12)
         ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
         ax.legend()
