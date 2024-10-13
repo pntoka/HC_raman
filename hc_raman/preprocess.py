@@ -114,3 +114,42 @@ def new_preprocess(file_path=None, wavenumber=None, intensity=None, baseline='ia
     y_data = data.spectral_data
     x_data = data.spectral_axis
     return x_data, y_data
+
+
+def conv_preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iarpls', window_length=11, polyorder=3, region=None):
+    
+        if file_path is not None:
+            data = load_raman_file(file_path)
+            wavenumber, intensity = get_wavenumber_intensity(data)
+        
+        if wavenumber is not None and intensity is not None:
+            intensity = intensity
+            wavenumber = wavenumber
+        
+        raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
+
+        if region is not None:
+            spectrum_regions = get_spectrum_region()
+            roi = spectrum_regions["spectrum"]["regions"][region]
+            region_val = (roi["min"], roi["max"])
+        
+        if baseline == 'iasls':
+            baseline_element = ramanspy.preprocessing.baseline.IASLS()
+        elif baseline == 'airpls':
+            baseline_element = ramanspy.preprocessing.baseline.AIRPLS()
+        elif baseline == 'iarpls':
+            baseline_element = ramanspy.preprocessing.baseline.IARPLS()
+        
+        pipeline_list = [
+            ramanspy.preprocessing.despike.WhitakerHayes(),
+            ramanspy.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder),
+            baseline_element]
+        
+        if region is not None:
+            pipeline_list.append(ramanspy.preprocessing.misc.Cropper(region=region_val))
+
+        preprocessing_pipeline = ramanspy.preprocessing.Pipeline(pipeline_list)
+        data = preprocessing_pipeline.apply(raman_spectrum)
+        y_data = data.spectral_data
+        x_data = data.spectral_axis
+        return x_data, y_data

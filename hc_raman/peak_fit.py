@@ -4,7 +4,7 @@ from hc_raman.utils import get_spectrum_region
 from hc_raman.baseline import airpls_baseline, iasls_baseline, nn_baseline, interpolate_data, Convclassifica
 import tomllib
 from lmfit.models import LorentzianModel, GaussianModel
-from hc_raman.preprocess import preprocess_raman_data, new_preprocess
+from hc_raman.preprocess import preprocess_raman_data, new_preprocess, conv_preprocess
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -348,3 +348,44 @@ def peak_fit_from_data(
         return fig, ax, result
 
     return result
+
+
+def get_ratio_from_file(
+        file_path,
+        baseline='iasls',
+        window_length=11,
+        polyorder=3,
+        region=None,
+        plot=False
+):
+    '''Get the ID/IG ratio from a Raman spectrum file by taking intensity of D peak and G peak'''
+    x_data, y_data = conv_preprocess(file_path=file_path, baseline=baseline, window_length=window_length,
+                                    polyorder=polyorder, region=region)
+    all_data = np.stack((x_data, y_data), axis=-1)
+    D_band_condition = (all_data[:, 0] > 1300) & (all_data[:, 0] < 1390)
+    G_band_condition = (all_data[:, 0] > 1500) & (all_data[:, 0] < 1670)
+    D_band = all_data[D_band_condition]
+    G_band = all_data[G_band_condition]
+    D_intensity = D_band[:, 1].max()
+    G_intensity = G_band[:, 1].max()
+    # D_intensity = np.mean(np.sort(D_band[:, 1])[-5:])
+    # G_intensity = np.mean(np.sort(G_band[:, 1])[-5:])
+    id_ig = D_intensity / G_intensity
+    if plot:
+        textstr = f"$I_D/I_G$ = {id_ig:.3f}"
+        props = dict(boxstyle='round', facecolor='gainsboro', alpha=0.5)
+        fig, ax = plt.subplots()
+        ax.plot(x_data, y_data, label='Raman spectrum')
+        ax.axvspan(1300, 1390, alpha=0.5, color='r', label='D band')
+        ax.axvspan(1500, 1620, alpha=0.5, color='g', label='G band')
+        # ax.scatter(D_band[:, 0], D_band[:, 1], label='D band', c='r')
+        # ax.scatter(G_band[:, 0], G_band[:, 1], label='G band', c='g')
+        ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
+        ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
+        ax.set_title(os.path.basename(file_path))
+        ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
+        ax.legend()
+        plt.show()
+        return fig, ax, id_ig
+
+    return id_ig
