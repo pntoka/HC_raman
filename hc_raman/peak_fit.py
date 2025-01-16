@@ -275,7 +275,8 @@ def peak_fit_from_file(
     polyorder=3, 
     region="first_order",
     mode="5peaks",
-    plot=False
+    plot=False,
+    display_plot = True
 ):
     '''Fit peaks to Raman spectrum from file using RamanSPy for preprocessing the data'''
 
@@ -303,7 +304,8 @@ def peak_fit_from_file(
         ax.tick_params(axis='both', which='major', labelsize=12)
         ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
         ax.legend()
-        plt.show()
+        if display_plot:
+            plt.show()
         return fig, ax, result
 
     return result
@@ -317,7 +319,8 @@ def peak_fit_from_data(
     polyorder=3, 
     region="first_order",
     mode="5peaks",
-    plot=False
+    plot=False,
+    display_plot = True
 ):
     '''Fit peaks to Raman spectrum from arrays with data using RamanSPy for preprocessing the data'''
     x_data, y_data = new_preprocess(wavenumber=wavenumber,intensity=intensity, baseline=baseline, region=region,
@@ -344,7 +347,8 @@ def peak_fit_from_data(
         ax.tick_params(axis='both', which='major', labelsize=12)
         ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
         ax.legend()
-        plt.show()
+        if display_plot:
+            plt.show()
         return fig, ax, result
 
     return result
@@ -356,7 +360,8 @@ def get_ratio_from_file(
         window_length=11,
         polyorder=3,
         region=None,
-        plot=False
+        plot=False,
+        display_plot = True
 ):
     '''Get the ID/IG ratio from a Raman spectrum file by taking intensity of D peak and G peak'''
     x_data, y_data = conv_preprocess(file_path=file_path, baseline=baseline, window_length=window_length,
@@ -385,7 +390,8 @@ def get_ratio_from_file(
         ax.set_title(os.path.basename(file_path))
         ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14, verticalalignment='top', bbox=props)
         ax.legend()
-        plt.show()
+        if display_plot:
+            plt.show()
         return fig, ax, id_ig
 
     return id_ig
