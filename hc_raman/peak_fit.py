@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from hc_raman.utils import get_spectrum_region
-from hc_raman.baseline import airpls_baseline, iasls_baseline, nn_baseline, interpolate_data, Convclassifica
+from hc_raman.baseline import airpls_baseline, iasls_baseline
 import tomllib
 from lmfit.models import LorentzianModel, GaussianModel
 from hc_raman.preprocess import preprocess_raman_data, new_preprocess, conv_preprocess
