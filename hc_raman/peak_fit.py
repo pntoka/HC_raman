@@ -5,39 +5,7 @@ from hc_raman.baseline import airpls_baseline, iasls_baseline, nn_baseline, inte
 import tomllib
 from lmfit.models import LorentzianModel, GaussianModel
 from hc_raman.preprocess import preprocess_raman_data, new_preprocess, conv_preprocess
-import torch
-import torch.nn as nn
 import matplotlib.pyplot as plt
-
-class Convclassifica(nn.Module):
-    def __init__(self):
-        super(Convclassifica, self).__init__()
-        self.hidden1 = nn.Sequential(
-            nn.Conv1d(
-                in_channels=1,
-                out_channels=16,
-                kernel_size=5,
-                stride=1,
-            ),
-            nn.ReLU(),
-            nn.AvgPool1d(kernel_size=2, stride=2),
-        )
-        self.hidden2 = nn.Sequential(
-            nn.Linear(
-                in_features=17568,
-                out_features=100,
-                bias=True,
-            ),
-            nn.ReLU(),
-        )
-        self.classifica = nn.Sequential(nn.Linear(100, 3), nn.Sigmoid())
-
-    def forward(self, x):
-        fc1 = self.hidden1(x)
-        fc1 = fc1.reshape(fc1.size(0), -1)
-        fc2 = self.hidden2(fc1)
-        output = self.classifica(fc2)
-        return output
 
 
 def get_peaks_config():
@@ -94,18 +62,13 @@ def baseline_analysis(
         file_path, baseline, window_length=11, polyorder=3,
         lam=10e6, p=1e-2, size=2200, iter=10
 ):
-    assert baseline in ["airpls", "iasls", "nn"]
+    assert baseline in ["airpls", "iasls"]
     x_data, y_data = filter_normalize_data(file_path, window_length, polyorder)
 
     if baseline == "airpls":
         return x_data, y_data, airpls_baseline(y_data, lam=lam)
     elif baseline == "iasls":
         return x_data, y_data, iasls_baseline(x_data, y_data, lam=lam, p=p)
-    elif baseline == "nn":
-        new_x_data, new_y_data = interpolate_data(x_data, y_data, size=size)
-        return new_x_data, new_y_data, nn_baseline(
-            x_data, y_data, size=size, iter=iter
-        )
 
 
 def baseline_substraction(
@@ -114,17 +77,12 @@ def baseline_substraction(
     """
     Substract the baseline from the Raman data.
     """
-    assert baseline in ["airpls", "iasls", "nn"]
+    assert baseline in ["airpls", "iasls"]
 
     if baseline == "airpls":
         y_data_substracted = y_data - airpls_baseline(y_data, lam=lam)
     elif baseline == "iasls":
         y_data_substracted = y_data - iasls_baseline(x_data, y_data, lam=lam, p=p)
-    elif baseline == "nn":
-        _, new_y_data = interpolate_data(x_data, y_data, size=size)
-        y_data_substracted = new_y_data - nn_baseline(
-            x_data, y_data, size=size, iter=iter
-        )
     return y_data_substracted
 
 
