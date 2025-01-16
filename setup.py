@@ -8,7 +8,7 @@ setup(
     package_data={
         'hc_raman': ['spectrum_config/*.toml', 'NNmodel.pkl']
                   },
-    install_requires=['numpy', 'scipy', 'lmfit', 'pybaselines', 'torch', 'scikit-learn', 'rosettasciio', 'ramanspy'], # Add any dependencies here
+    install_requires=['numpy', 'scipy', 'lmfit', 'pybaselines', 'rosettasciio', 'ramanspy'], # Add any dependencies here
     python_requires='>=3.11',  
     # tests_require=['pytest'],
     author='Piotr Toka',
