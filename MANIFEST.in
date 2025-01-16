@@ -1,2 +1,1 @@
-include hc_raman/NNmodel.pkl
 include hc_raman/spectrum_config/* .toml
