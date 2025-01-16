@@ -24,7 +24,7 @@ Für G: 1580-1590 D5 und D2 weiß ich nicht
 peak_name = "G"
 peak_type = "Lorentzian"
 [first_order.peaks.G.param_hints]
-center = {value = 1571, min = 1545, max = 1595}
+center = {value = 1580, min = 1545, max = 1595}
 sigma = {value = 30, min = 5, max = 150}
 amplitude = {value = 100, min = 1e-05, max = 500}
 
@@ -52,7 +52,7 @@ j.molstruc.2010.12.065
 peak_name = "D2"
 peak_type = "Lorentzian"
 [first_order.peaks.D2.param_hints]
-center = {value = 1606, min = 1592, max = 1635}
+center = {value = 1620, min = 1592, max = 1635}
 sigma = {value = 30, min = 5, max = 150}
 amplitude = {value = 35, min = 5, max = 500}
 
@@ -66,7 +66,7 @@ Für D3: 1495-1515
 peak_name = "D3"
 peak_type = "Gaussian"
 [first_order.peaks.D3.param_hints]
-center = {value = 1480, min = 1450, max = 1525}
+center = {value = 1500, min = 1450, max = 1525}
 sigma = {value = 25, min = 1, max = 150}
 amplitude = {value = 25, min = 1e-02, max = 500}
 
@@ -81,7 +81,7 @@ Für D4: 1185-1210, but depends on if there is D5 or not.
 peak_name = "D4"
 peak_type = "Lorentzian"
 [first_order.peaks.D4.param_hints]
-center = {value = 1230, min = 1180, max = 1310}
+center = {value = 1200, min = 1180, max = 1310}
 sigma = {value = 40, min = 1, max = 150}
 amplitude = {value = 20, min = 1e-02, max = 200}
 
