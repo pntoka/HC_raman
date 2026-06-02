@@ -1,155 +1,101 @@
-import os
-import numpy as np
-import tomllib
 from .utils import load_raman_file, get_wavenumber_intensity, get_spectrum_region
-from sklearn.preprocessing import MinMaxScaler
-from scipy.signal import savgol_filter
 import ramanspy
 
 
-def filter_data(data, window_length=11, polyorder=3):
+def _build_baseline_element(baseline):
+    """Map a baseline name to a ramanspy baseline preprocessing element."""
+    if baseline == "iasls":
+        return ramanspy.preprocessing.baseline.IASLS()
+    elif baseline == "airpls":
+        return ramanspy.preprocessing.baseline.AIRPLS()
+    elif baseline == "iarpls":
+        return ramanspy.preprocessing.baseline.IARPLS()
+    raise ValueError(f"Unknown baseline '{baseline}'. Use 'iasls', 'airpls' or 'iarpls'.")
+
+
+def preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iarpls',
+               window_length=11, polyorder=3, region="first_order"):
     """
-    Apply a Savitzky-Golay filter to the data.
+    Preprocess a Raman spectrum for peak fitting using RamanSPy.
+
+    Pipeline: despike -> denoise (Savitzky-Golay) -> MinMax normalise ->
+    baseline correction -> crop to region.
+
+    Provide either ``file_path`` or both ``wavenumber`` and ``intensity``.
 
     Parameters
     ----------
-    data : numpy.ndarray
-        Data to be filtered.
-    window_length : int, optional
-        Length of the filter window (default is 11).
-    polyorder : int, optional
-        Order of the polynomial to fit to the data (default is 3).
+    file_path : str, optional
+        Path to a Renishaw Raman file.
+    wavenumber, intensity : numpy.ndarray, optional
+        Raw spectrum arrays (used when ``file_path`` is not given).
+    baseline : str, optional
+        Baseline algorithm: 'iasls', 'airpls' or 'iarpls' (default 'iarpls').
+    window_length, polyorder : int, optional
+        Savitzky-Golay denoising parameters.
+    region : str, optional
+        Named region to crop to (see spectrum_regions.toml, default 'first_order').
 
     Returns
     -------
-    filtered_data : numpy.ndarray
-        Filtered data.
+    x_data, y_data : numpy.ndarray
+        Preprocessed wavenumber and intensity.
     """
-    # Apply a Savitzky-Golay filter
-    filtered_data = savgol_filter(data, window_length, polyorder)
-    return filtered_data
-
-
-def normalize_data(data):
-    """
-    Normalize the data.
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        Data to be normalized.
-
-    Returns
-    -------
-    normalized_data : numpy.ndarray
-        Normalized data.
-    """
-    # Normalize the data
-    scaler = MinMaxScaler()
-    normalized_data = scaler.fit_transform(data.reshape(-1, 1)).flatten()
-    return normalized_data
-
-
-def preprocess_raman_data(file_path, window_length=11, polyorder=3):
-    """
-    Preprocess Renishaw Raman data.
-
-    Parameters
-    ----------
-    file_path : str
-        Path to the Renishaw Raman file.
-    window_length : int, optional
-        Length of the filter window (default is 11).
-    polyorder : int, optional
-        Order of the polynomial to fit to the data (default is 3).
-
-    Returns
-    -------
-    wavenumber : numpy.ndarray
-        Wavenumber values.
-    intensity : numpy.ndarray
-        Intensity values.
-    """
-    # Load the Renishaw Raman file
-    data = load_raman_file(file_path)
-    # Extract the wavenumber and intensity
-    wavenumber, intensity = get_wavenumber_intensity(data)
-    # Filter the intensity data
-    filtered_intensity = filter_data(intensity, window_length, polyorder)
-    # Normalize the intensity data
-    normalized_intensity = normalize_data(filtered_intensity)
-    return wavenumber, normalized_intensity
-
-
-def new_preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iarpls', window_length=11, polyorder=3, region="first_order"):
-    
     if file_path is not None:
         data = load_raman_file(file_path)
         wavenumber, intensity = get_wavenumber_intensity(data)
-    
-    if wavenumber is not None and intensity is not None:
-        intensity = intensity
-        wavenumber = wavenumber
 
     raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
     spectrum_regions = get_spectrum_region()
     roi = spectrum_regions["spectrum"]["regions"][region]
     region_val = (roi["min"], roi["max"])
 
-    if baseline == 'iasls':
-        baseline_element = ramanspy.preprocessing.baseline.IASLS()
-    elif baseline == 'airpls':
-        baseline_element = ramanspy.preprocessing.baseline.AIRPLS()
-    elif baseline == 'iarpls':
-        baseline_element = ramanspy.preprocessing.baseline.IARPLS()
-    
     preprocessing_pipeline = ramanspy.preprocessing.Pipeline([
         ramanspy.preprocessing.despike.WhitakerHayes(),
         ramanspy.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder),
         ramanspy.preprocessing.normalise.MinMax(),
-        baseline_element,
+        _build_baseline_element(baseline),
         ramanspy.preprocessing.misc.Cropper(region=region_val)
     ])
     data = preprocessing_pipeline.apply(raman_spectrum)
-    y_data = data.spectral_data
-    x_data = data.spectral_axis
-    return x_data, y_data
+    return data.spectral_axis, data.spectral_data
 
 
-def conv_preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iarpls', window_length=11, polyorder=3, region=None):
-    
-        if file_path is not None:
-            data = load_raman_file(file_path)
-            wavenumber, intensity = get_wavenumber_intensity(data)
-        
-        if wavenumber is not None and intensity is not None:
-            intensity = intensity
-            wavenumber = wavenumber
-        
-        raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
+def conv_preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iarpls',
+                    window_length=11, polyorder=3, region=None):
+    """
+    Preprocess a Raman spectrum for the conventional D/G ratio (no normalisation).
 
-        if region is not None:
-            spectrum_regions = get_spectrum_region()
-            roi = spectrum_regions["spectrum"]["regions"][region]
-            region_val = (roi["min"], roi["max"])
-        
-        if baseline == 'iasls':
-            baseline_element = ramanspy.preprocessing.baseline.IASLS()
-        elif baseline == 'airpls':
-            baseline_element = ramanspy.preprocessing.baseline.AIRPLS()
-        elif baseline == 'iarpls':
-            baseline_element = ramanspy.preprocessing.baseline.IARPLS()
-        
-        pipeline_list = [
-            ramanspy.preprocessing.despike.WhitakerHayes(),
-            ramanspy.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder),
-            baseline_element]
-        
-        if region is not None:
-            pipeline_list.append(ramanspy.preprocessing.misc.Cropper(region=region_val))
+    Pipeline: despike -> denoise (Savitzky-Golay) -> baseline correction ->
+    optional crop to region.
 
-        preprocessing_pipeline = ramanspy.preprocessing.Pipeline(pipeline_list)
-        data = preprocessing_pipeline.apply(raman_spectrum)
-        y_data = data.spectral_data
-        x_data = data.spectral_axis
-        return x_data, y_data
+    Provide either ``file_path`` or both ``wavenumber`` and ``intensity``.
+
+    Parameters are the same as :func:`preprocess`, except ``region`` is optional
+    (no cropping is applied when ``region`` is None).
+
+    Returns
+    -------
+    x_data, y_data : numpy.ndarray
+        Preprocessed wavenumber and intensity.
+    """
+    if file_path is not None:
+        data = load_raman_file(file_path)
+        wavenumber, intensity = get_wavenumber_intensity(data)
+
+    raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
+
+    pipeline_list = [
+        ramanspy.preprocessing.despike.WhitakerHayes(),
+        ramanspy.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder),
+        _build_baseline_element(baseline),
+    ]
+
+    if region is not None:
+        spectrum_regions = get_spectrum_region()
+        roi = spectrum_regions["spectrum"]["regions"][region]
+        pipeline_list.append(ramanspy.preprocessing.misc.Cropper(region=(roi["min"], roi["max"])))
+
+    preprocessing_pipeline = ramanspy.preprocessing.Pipeline(pipeline_list)
+    data = preprocessing_pipeline.apply(raman_spectrum)
+    return data.spectral_axis, data.spectral_data
