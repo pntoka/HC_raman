@@ -43,14 +43,17 @@ def fit_model(x_data, y_data, mode="5peaks", region="first_order"):
     Fit the peaks to the Raman spectrum.
     """
     model, params = build_lmfit_model(mode, region)
-    result = model.fit(y_data, params, x=x_data)
+    # changing fit model to least_squares and lowering the xtol
+    result = model.fit(y_data, params, x=x_data, method='least_squares', fit_kws={'ftol':1e-10, 'xtol':1e-10})
     return result
 
 
 def get_id_ig(result):
-    """Compute the I_D/I_G ratio from a fitted lmfit result (D_height / G_height)."""
+    """Compute the I_D/I_G ratio from a fitted lmfit result (D_area / G_area)."""
     results_dict = result.params.valuesdict()
-    id_ig = results_dict["D_height"] / results_dict["G_height"]
+    D_area = 0.5 * np.pi * results_dict["D_height"] * results_dict["D_fwhm"]
+    G_area = 0.5 * np.pi * results_dict["G_height"] * results_dict["G_fwhm"]
+    id_ig = D_area / G_area
     return id_ig
 
 

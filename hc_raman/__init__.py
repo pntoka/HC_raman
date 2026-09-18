@@ -1,4 +1,4 @@
-from hc_raman.preprocess import preprocess, conv_preprocess
+from hc_raman.preprocess import preprocess, conv_preprocess, get_quality_metrics
 from hc_raman.peak_fit import (
     peak_fit_from_file,
     peak_fit_from_data,
@@ -12,6 +12,7 @@ from hc_raman.peak_fit import (
 __all__ = [
     "preprocess",
     "conv_preprocess",
+    "get_quality_metrics",
     "peak_fit_from_file",
     "peak_fit_from_data",
     "get_ratio_from_file",
