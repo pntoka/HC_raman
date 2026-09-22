@@ -36,6 +36,9 @@ _BOX_JITTER = (0.15, 0.85)
 
 _FIT_KWS = {'ftol': 1e-12, 'xtol': 1e-12}
 
+_X_LABEL = "Wavenumber (cm$^-1$)"
+_Y_LABEL = "Normalized Intensity (a.u.)"
+
 
 def get_peaks_config():
     with open(
@@ -369,7 +372,8 @@ def _spectrum_params(model, params, index):
     return single
 
 
-def fit_sample(spectra, mode="5peaks", region="first_order"):
+def fit_sample(spectra, mode="5peaks", region="first_order", titles=None,
+               plot=False, display_plot=True):
     """
     Fit every measurement of one sample at once, with the band shapes shared.
 
@@ -385,12 +389,21 @@ def fit_sample(spectra, mode="5peaks", region="first_order"):
         Preprocessed measurements of one sample.
     mode, region : str, optional
         As for :func:`fit_model`.
+    titles : sequence of str, optional
+        A name per measurement, used when plotting.
+    plot : bool, optional
+        If True, also plot every measurement — see :func:`plot_sample_fit`.
+    display_plot : bool, optional
+        If True (default), show the figure when ``plot`` is True.
 
     Returns
     -------
     result : lmfit.minimizer.MinimizerResult
-        The joint fit. Its parameters carry a ``_s<index>`` suffix where they belong to
-        a single measurement, and no suffix where they are shared.
+        The joint fit, or ``(fig, axes, result, summary)`` when ``plot=True``. Its
+        parameters carry a ``_s<index>`` suffix where they belong to a single
+        measurement, and no suffix where they are shared. It also carries the
+        measurements and the model it was fitted with, so :func:`plot_sample_fit` can
+        redraw it later.
     summary : dict
         ``id_ig``
             The sample's I_D/I_G, from the band areas summed over the measurements.
@@ -437,6 +450,18 @@ def fit_sample(spectra, mode="5peaks", region="first_order"):
                           "fwhm": per_spectrum[0][f"{peak}_fwhm"].value}
                    for peak in peaks},
     }
+
+    # Keep what a later plot needs: a MinimizerResult knows nothing about the data it
+    # was fitted to, and the wrappers do not hand the preprocessed spectra back.
+    result.spectra = spectra
+    result.model = model
+    result.peaks = peaks
+    result.titles = titles
+    result.id_ig = summary["id_ig"]
+
+    if plot:
+        fig, axes = plot_sample_fit(result, display_plot=display_plot)
+        return fig, axes, result, summary
     return result, summary
 
 
@@ -447,15 +472,18 @@ def peak_fit_sample_from_data(
     polyorder=3,
     region="first_order",
     mode="5peaks",
+    plot=False,
+    display_plot=True,
 ):
     '''Preprocess and jointly fit every measurement of one sample.
 
     ``measurements`` is a sequence of ``(wavenumber, intensity)`` array pairs.
-    Returns ``(result, summary)`` as :func:`fit_sample` does.'''
+    Returns ``(result, summary)`` as :func:`fit_sample` does, or
+    ``(fig, axes, result, summary)`` when ``plot=True``.'''
     spectra = [preprocess(wavenumber=wavenumber, intensity=intensity, baseline=baseline,
                           region=region, window_length=window_length, polyorder=polyorder)
                for wavenumber, intensity in measurements]
-    return fit_sample(spectra, mode, region)
+    return fit_sample(spectra, mode, region, plot=plot, display_plot=display_plot)
 
 
 def peak_fit_sample_from_files(
@@ -465,41 +493,132 @@ def peak_fit_sample_from_files(
     polyorder=3,
     region="first_order",
     mode="5peaks",
+    plot=False,
+    display_plot=True,
 ):
     '''Preprocess and jointly fit every measurement file of one sample.
 
-    Returns ``(result, summary)`` as :func:`fit_sample` does.'''
+    Returns ``(result, summary)`` as :func:`fit_sample` does, or
+    ``(fig, axes, result, summary)`` when ``plot=True``. Plots are titled with each
+    file's name.'''
     spectra = [preprocess(file_path=file_path, baseline=baseline, region=region,
                           window_length=window_length, polyorder=polyorder)
                for file_path in file_paths]
-    return fit_sample(spectra, mode, region)
+    titles = [os.path.basename(file_path) for file_path in file_paths]
+    return fit_sample(spectra, mode, region, titles=titles, plot=plot,
+                      display_plot=display_plot)
 
 
-def _plot_fit(x_data, y_data, result, region, mode, title, display_plot=True):
-    """Plot the fitted peaks, the composite fit and the raw data. Returns (fig, ax)."""
-    id_ig = get_id_ig(result)
-    comps = result.eval_components(x=x_data)
-    peaks = get_mode_peaks(mode, region)
-    textstr = f"$I_D/I_G$ = {id_ig:.3f} \n R$^2$ = {result.rsquared:.4f}"
+def _draw_fit(ax, x_data, y_data, comps, best_fit, peaks, id_ig, rsquared, title):
+    """Draw one fitted spectrum onto an existing axis."""
+    textstr = f"$I_D/I_G$ = {id_ig:.3f} \n R$^2$ = {rsquared:.4f}"
     props = dict(boxstyle='round', facecolor='gainsboro', alpha=0.5)
-    fig, ax = plt.subplots()
     for peak in peaks:
         ax.plot(x_data, comps[f'{peak}_'], linestyle='--', label=peak)
     if BACKGROUND_PREFIX in comps:
         ax.plot(x_data, comps[BACKGROUND_PREFIX], linestyle=':', c='grey',
                 label="background")
     ax.scatter(x_data, y_data, c='k', label="raw data", s=1)
-    ax.plot(x_data, result.best_fit, label="fit", linestyle='-', c='r')
-    ax.set_xlabel("Wavenumber (cm$^-1$)", fontsize=14)
-    ax.set_ylabel("Normalized Intensity (a.u.)", fontsize=14)
+    ax.plot(x_data, best_fit, label="fit", linestyle='-', c='r')
     ax.set_title(title)
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=14,
             verticalalignment='top', bbox=props)
+
+
+def _plot_fit(x_data, y_data, result, region, mode, title, display_plot=True):
+    """Plot the fitted peaks, the composite fit and the raw data. Returns (fig, ax)."""
+    fig, ax = plt.subplots()
+    _draw_fit(ax, x_data, y_data, result.eval_components(x=x_data), result.best_fit,
+              get_mode_peaks(mode, region), get_id_ig(result), result.rsquared, title)
+    ax.set_xlabel(_X_LABEL, fontsize=14)
+    ax.set_ylabel(_Y_LABEL, fontsize=14)
     ax.legend()
     if display_plot:
         plt.show()
     return fig, ax
+
+
+def _spectrum_fit(result, index):
+    """Components, composite curve, ratio and R-squared for one measurement."""
+    x_data, y_data = result.spectra[index]
+    params = _spectrum_params(result.model, result.params, index)
+    comps = result.model.eval_components(params=params, x=x_data)
+    best_fit = result.model.eval(params=params, x=x_data)
+    rsquared = 1 - (np.sum((y_data - best_fit) ** 2)
+                    / np.sum((y_data - y_data.mean()) ** 2))
+    id_ig = params['D_amplitude'].value / params['G_amplitude'].value
+    return x_data, y_data, comps, best_fit, id_ig, rsquared
+
+
+def plot_sample_fit(result, index=None, titles=None, display_plot=True):
+    """
+    Plot a sample fit: every measurement as its own panel, or one of them alone.
+
+    Takes only the result of :func:`fit_sample`, which carries the measurements and the
+    model it was fitted with, so a fit can be plotted at any point after it was made.
+
+    Parameters
+    ----------
+    result : lmfit.minimizer.MinimizerResult
+        As returned by :func:`fit_sample` or either ``peak_fit_sample_*`` wrapper.
+    index : int, optional
+        Which measurement to draw. The default, None, draws all of them in a grid.
+    titles : sequence of str, optional
+        One title per measurement. Defaults to the names the fit was given, or
+        ``measurement 1..n``.
+    display_plot : bool, optional
+        If True (default), call ``plt.show()``.
+
+    Returns
+    -------
+    (fig, axes) for the whole sample, where ``axes`` is a 2-D array, or (fig, ax) for a
+    single ``index``.
+    """
+    if not hasattr(result, "spectra"):
+        raise ValueError("plot_sample_fit needs a result from fit_sample; this one does "
+                         "not carry the measurements it was fitted to.")
+    n_spectra = len(result.spectra)
+    labels = (titles or result.titles
+              or [f"measurement {i + 1}" for i in range(n_spectra)])
+
+    if index is not None:
+        if not -n_spectra <= index < n_spectra:
+            raise IndexError(f"index {index} is out of range for a sample with "
+                             f"{n_spectra} measurement(s).")
+        index %= n_spectra          # the parameters are named with positive indices
+        fig, ax = plt.subplots()
+        x_data, y_data, comps, best_fit, id_ig, rsquared = _spectrum_fit(result, index)
+        _draw_fit(ax, x_data, y_data, comps, best_fit, result.peaks, id_ig, rsquared,
+                  labels[index])
+        ax.set_xlabel(_X_LABEL, fontsize=14)
+        ax.set_ylabel(_Y_LABEL, fontsize=14)
+        ax.legend()
+        if display_plot:
+            plt.show()
+        return fig, ax
+
+    n_cols = min(n_spectra, 2)
+    n_rows = int(np.ceil(n_spectra / n_cols))
+    fig, axes = plt.subplots(n_rows, n_cols, squeeze=False,
+                             figsize=(5 * n_cols, 3.6 * n_rows))
+    for position, ax in enumerate(axes.ravel()):
+        if position >= n_spectra:
+            ax.axis("off")
+            continue
+        x_data, y_data, comps, best_fit, id_ig, rsquared = _spectrum_fit(result, position)
+        _draw_fit(ax, x_data, y_data, comps, best_fit, result.peaks, id_ig, rsquared,
+                  labels[position])
+    # One legend is enough: every panel draws the same bands. It goes top right, out of
+    # the way of the ratio box each panel puts top left.
+    axes.ravel()[0].legend(fontsize=8, ncol=2, loc='upper right')
+    fig.suptitle(f"sample $I_D/I_G$ = {result.id_ig:.3f}")
+    fig.supxlabel(_X_LABEL)
+    fig.supylabel(_Y_LABEL)
+    fig.tight_layout()
+    if display_plot:
+        plt.show()
+    return fig, axes
 
 
 def peak_fit_from_file(

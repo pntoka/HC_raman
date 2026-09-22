@@ -59,6 +59,7 @@ them and not the positions and widths. Sharing these parameters constrains the f
 from hc_raman import (
     peak_fit_sample_from_data,
     peak_fit_sample_from_files,
+    plot_sample_fit,
     peak_fit_from_data,
     peak_fit_from_file,
     get_ratio_from_file,
@@ -76,6 +77,10 @@ summary["shared"]       # {'G': {'center': ..., 'fwhm': ...}, 'D': {...}, ...}
 # ...or straight from files
 result, summary = peak_fit_sample_from_files(["spot1.wdf", "spot2.wdf"])
 
+# see the fit: every measurement as its own panel, or just one of them
+fig, axes, result, summary = peak_fit_sample_from_data(measurements, plot=True)
+fig, ax = plot_sample_fit(result, index=0)
+
 # 2) A single spectrum, from a file or from arrays already in memory
 result = peak_fit_from_file("sample.wdf", baseline="iasls", mode="5peaks")
 result = peak_fit_from_data(wavenumber, intensity, mode="5peaks")
@@ -89,9 +94,15 @@ fig, ax, result = peak_fit_from_file("sample.wdf", mode="5peaks", plot=True)
 id_ig = get_ratio_from_file("sample.wdf", baseline="iasls")
 ```
 
-When `plot=True`, the single-spectrum fitting functions return `(fig, ax, result)` and
-the conventional function returns `(fig, ax, ratio)`. Pass `display_plot=False` to build
-the figure without calling `plt.show()` (useful for saving figures in a script).
+When `plot=True`, the single-spectrum fitting functions return `(fig, ax, result)`, the
+sample fitting functions return `(fig, axes, result, summary)` with `axes` a 2-D array of
+panels, and the conventional function returns `(fig, ax, ratio)`. Pass
+`display_plot=False` to build the figure without calling `plt.show()` (useful for saving
+figures in a script).
+
+A sample result remembers the measurements and the model it was fitted with, so
+`plot_sample_fit(result)` can redraw it at any point — all panels, or one measurement on
+its own with `index=`.
 
 ## Checking a fit
 
@@ -238,6 +249,8 @@ curve the fit will actually see.
   `peak_fit_sample_from_files(file_paths, ...)` — preprocess + fit a whole sample;
   return `(result, summary)`.
 - `fit_sample(spectra, mode, region)` — the sample fit on already preprocessed spectra.
+- `plot_sample_fit(result, index=None)` — plot a sample fit, all panels or one
+  measurement; returns `(fig, axes)` or `(fig, ax)`.
 - `peak_fit_from_file(...)` / `peak_fit_from_data(...)` — preprocess + fit one spectrum;
   return an lmfit result.
 - `get_ratio_from_file(...)` — conventional I_D/I_G without fitting.
