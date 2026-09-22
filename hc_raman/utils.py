@@ -41,7 +41,7 @@ def get_wavenumber_intensity(data):
     """
     # Extract the wavenumber and intensity
     wavenumber = np.asarray(data[0]["axes"][0]["axis"], dtype=np.float64)
-    intensity = np.asarray(data[0]["data"], dtytpe=np.float64)
+    intensity = np.asarray(data[0]["data"], dtype=np.float64)
     return wavenumber, intensity
 
 
