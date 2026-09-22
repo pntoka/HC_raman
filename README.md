@@ -6,16 +6,19 @@ materials.
 
 Give it a raw Renishaw Raman file (or raw wavenumber/intensity arrays) and it will:
 
-1. **Preprocess** the spectrum (despike → Savitzky-Golay denoise → normalise → baseline
-   correction → crop to a region of interest), using
+1. **Preprocess** the spectrum (despike → Savitzky-Golay denoise → crop → baseline
+   correction → normalise → crop to the fit region), using
    [RamanSPy](https://ramanspy.readthedocs.io/).
 2. **Fit peaks** in the first-order region with a configurable multi-peak
-   Lorentzian/Gaussian model ([lmfit](https://lmfit.github.io/lmfit-py/)). The configuration for the peak fitting comes from [MyPyDavid/raman-fitting](https://github.com/MyPyDavid/raman-fitting)
-3. **Compute I_D/I_G** — either from the fitted peak areas, or with a simpler
-   conventional band-intensity method.
+   Lorentzian/Gaussian model plus a background term
+   ([lmfit](https://lmfit.github.io/lmfit-py/)). The band scheme follows
+   [Sadezky et al., *Carbon* 43 (2005) 1731](https://doi.org/10.1016/j.carbon.2005.02.018);
+   the config layout comes from [MyPyDavid/raman-fitting](https://github.com/MyPyDavid/raman-fitting).
+3. **Compute I_D/I_G** — from the fitted band areas, for a single spectrum or for a
+   whole sample at once, or with a simpler conventional band-intensity method.
 
-It can also **measure the quality** of a spectrum (signal-to-noise and background
-magnitude) before you trust the ratio it produces — see [Data quality](#data-quality).
+Data on the quality of a spectrum (signal-to-noise and background
+magnitude) can alsoe be generated (see [Data quality](#data-quality)).
 
 ## Installation
 
@@ -37,42 +40,146 @@ pip install -e .
 Requires Python ≥ 3.11. Dependencies: `numpy`, `lmfit`, `rosettasciio`, `ramanspy`,
 `matplotlib`.
 
-## Two ways to get I_D/I_G
+## Three ways to get I_D/I_G
 
 | Method | Function | How the ratio is computed |
 |--------|----------|---------------------------|
-| **Peak fitting** (recommended) | `peak_fit_from_file`, `peak_fit_from_data` | Fits a multi-peak model; ratio = fitted `D_area / G_area` via `get_id_ig`. |
+| **Sample fitting** (recommended) | `peak_fit_sample_from_data`, `peak_fit_sample_from_files` | Fits every measurement of one sample at once with the band shapes shared; ratio = summed `D_area / G_area`. |
+| **Peak fitting** | `peak_fit_from_file`, `peak_fit_from_data` | Fits one spectrum; ratio = fitted `D_area / G_area` via `get_id_ig`. |
 | **Conventional** | `get_ratio_from_file` | Max intensity in the D band (1300–1390 cm⁻¹) / max intensity in the G band (1500–1670 cm⁻¹). No fitting. |
+
+Sample fitting is recommended because a single spectrum does not pin down the G band
+area well enough for a per-spectrum ratio to be stable. Measurements of one sample are
+the same material at different spots, so only the band *areas* should differ between
+them and not the positions and widths. Sharing these parameters constrains the fit several times as much data, and gives one representative ratio per sample.
 
 ## Usage
 
 ```python
 from hc_raman import (
-    peak_fit_from_file,
+    peak_fit_sample_from_data,
+    peak_fit_sample_from_files,
     peak_fit_from_data,
+    peak_fit_from_file,
     get_ratio_from_file,
     get_id_ig,
+    params_at_bound,
 )
 
-# 1) Peak fitting straight from a raw Renishaw file
-result = peak_fit_from_file("sample.wdf", baseline="iasls", mode="5peaks", region="first_order")
+# 1) One ratio per sample, from all of its measurements at once
+measurements = [(wavenumber_1, intensity_1), (wavenumber_2, intensity_2), ...]
+result, summary = peak_fit_sample_from_data(measurements, mode="3peaks")
+summary["id_ig"]        # the sample's I_D/I_G
+summary["per_spectrum"] # I_D/I_G of each measurement; their spread is spot-to-spot variation
+summary["shared"]       # {'G': {'center': ..., 'fwhm': ...}, 'D': {...}, ...}
+
+# ...or straight from files
+result, summary = peak_fit_sample_from_files(["spot1.wdf", "spot2.wdf"])
+
+# 2) A single spectrum, from a file or from arrays already in memory
+result = peak_fit_from_file("sample.wdf", baseline="iasls", mode="5peaks")
+result = peak_fit_from_data(wavenumber, intensity, mode="5peaks")
 print("ID/IG =", get_id_ig(result))
+print("stuck parameters:", params_at_bound(result))   # should be empty
 
 # ...with a plot of the fit (returns the figure objects too)
 fig, ax, result = peak_fit_from_file("sample.wdf", mode="5peaks", plot=True)
 
-# 2) Peak fitting from arrays you already have in memory
-result = peak_fit_from_data(wavenumber, intensity, mode="6peaks")
-print("ID/IG =", get_id_ig(result))
-
 # 3) Conventional D/G ratio (no peak fitting)
 id_ig = get_ratio_from_file("sample.wdf", baseline="iasls")
-print("ID/IG (conventional) =", id_ig)
 ```
 
-When `plot=True`, the fitting functions return `(fig, ax, result)` and the conventional
-function returns `(fig, ax, ratio)`. Pass `display_plot=False` to build the figure
-without calling `plt.show()` (useful for saving figures in a script).
+When `plot=True`, the single-spectrum fitting functions return `(fig, ax, result)` and
+the conventional function returns `(fig, ax, ratio)`. Pass `display_plot=False` to build
+the figure without calling `plt.show()` (useful for saving figures in a script).
+
+## Checking a fit
+
+Overlapping broad bands make it easy for a fit to look excellent and still be
+meaningless: R² stays above 0.98 whatever the bands do, because D and G carry almost all
+the variance. Check these instead. Single-spectrum results carry all three as
+attributes; `params_at_bound` is also a function, usable on any result including a
+sample fit.
+
+| Check | Meaning |
+|-------|---------|
+| `result.params_at_bound` | Parameters left sitting on a bound. This should be empty and any parameter that is here was stopped by the box rather than by the data, so that band is not describing what it is named for. |
+| `result.basin_spread` | Spread of I_D/I_G across the starts that reached within 1% of the best chi-square. Near zero means every start found the same optimum; `NaN` when only one start ran. |
+| `result.n_basins` | Distinct ratios the starts reached. Above 1 means several equally good solutions exist and the ratio depends on where the fit began. |
+
+## Configuration
+
+### Peak models (`mode`)
+
+Defined in [`hc_raman/spectrum_config/peaks_config.toml`](hc_raman/spectrum_config/peaks_config.toml):
+
+| `mode` | Peaks |
+|--------|-------|
+| `1peak` | G |
+| `2peaks` | G + D |
+| `3peaks` | G + D + D3 |
+| `4peaks` | G + D + D3 + D4 |
+| `5peaks` *(default)* | G + D + D2 + D3 + D4 |
+| `6peaks` | G + D + D2 + D3 + D4 + D5 |
+
+Each peak has a line shape (`Lorentzian` or `Gaussian`) and
+initial/bounded values for center, sigma and amplitude. To adjust peak positions/bounds
+or add new peaks, edit the TOML — no code changes needed.
+
+Two things to know before changing the first-order bands:
+
+- **D3 is Gaussian**, following Sadezky et al.; the others are Lorentzian.
+- **D2 and D4 have a fixed center and width, and D3 a fixed width** (`vary = false`).
+  Data of this quality does not determine them, so letting them float costs
+  reproducibility without buying information. Their *amplitudes* are still fitted.
+
+More bands raise R² but widen the spread of I_D/I_G between repeat measurements, so
+`5peaks` is not automatically the better choice.
+
+### Background
+
+The `[first_order.background]` section of the same TOML adds an explicit background to
+the model under the `bkg_` prefix, with `type` set to `linear` (the default), `constant`
+or `none`, and bounds for each of its parameters.
+
+A baseline-corrected spectrum does not reach zero inside the fit window. Without a
+background term that residue is absorbed by whichever band is broadest. This is in practice D4, which then ends up pinned against its bounds acting as a sloping background rather than a band. The bounds in the TOML assume the normalised spectrum `preprocess` produces, whose tallest band is 1.0.
+
+### Fitting procedure (`procedure`)
+
+How the optimiser is started. The model is identical in every case; what changes is how
+much confidence you can have that the answer does not depend on where the fit began.
+
+| `procedure` | What it does |
+|-------------|--------------|
+| `single` | One fit from the initial values in the TOML. Fastest. |
+| `staged` | Fits G and D first, then adds the remaining bands one at a time, each stage warm-started from the previous one. |
+| `multistart` | Best of `n_starts` single fits from randomised starts. |
+| `staged_multistart` *(default)* | Best of `n_starts` staged cascades from randomised starts. |
+
+`n_starts` (default 6) and `seed` (default 0) control the randomised starts; the seed is
+fixed, so a given spectrum always returns the same answer. With the shipped configuration
+all four agree, and the multi-start ones cost roughly 10–15× the time for the same number —
+what they add is the `basin_spread` and `n_basins` diagnostics, which catch the case
+where loosened bounds or an extra band make the fit ambiguous again. Use
+`procedure="single"` for speed once a configuration is known to be sound.
+
+### Baseline (`baseline`)
+
+One of `iasls`, `airpls`, `iarpls`, `asls` (all from RamanSPy). The peak-fitting entry
+points default to `iasls`.
+
+### Region (`region`)
+
+Named wavenumber ranges from
+[`hc_raman/spectrum_config/spectrum_regions.toml`](hc_raman/spectrum_config/spectrum_regions.toml),
+e.g. `first_order` (900–1900 cm⁻¹, the default for fitting), `second_order`, `full`, etc.
+Peak fitting is currently configured for the `first_order` region.
+
+`preprocess` crops to `baseline_window` (800–2150 cm⁻¹) *before* correcting the baseline,
+so the algorithm is not dragged by the second-order bands above ~2200 cm⁻¹ that no model
+accounts for, then crops to the fit region. `g_band` (1500–1620), `d_band` (1300–1390)
+and `mid` (1850–2150, signal-free) are used by `get_quality_metrics`.
 
 ## Data quality
 
@@ -106,8 +213,7 @@ fig, ax, metrics = get_quality_metrics("sample.wdf", plot=True)
 `snr`, `baseline_ratio` and `baseline_tilt` are dimensionless and so can be compared
 across instruments and units. `signal` and `noise` are in whatever intensity units you
 supplied, so compare them only within one instrument and one set of acquisition
-settings — which is what makes them useful for spotting an exposure or laser power
-problem across a batch.
+settings.
 
 The noise is measured *before* Savitzky-Golay denoising (smoothing would remove the
 noise being measured) and without normalisation, so `baseline_ratio` includes any
@@ -119,50 +225,23 @@ naming the region and your spectrum's range.
 Pass the same `baseline=` you intend to fit with, so the baseline metrics describe the
 curve the fit will actually see.
 
-## Configuration
-
-### Peak models (`mode`)
-
-Defined in [`hc_raman/spectrum_config/peaks_config.toml`](hc_raman/spectrum_config/peaks_config.toml):
-
-| `mode` | Peaks |
-|--------|-------|
-| `1peak` | G |
-| `2peaks` | G + D |
-| `3peaks` | G + D + D3 |
-| `4peaks` | G + D + D3 + D4 |
-| `5peaks` *(default)* | G + D + D2 + D3 + D4 |
-| `6peaks` | G + D + D2 + D3 + D4 + D5 |
-
-Each peak has a line shape (Lorentzian or Gaussian) and initial/bounded values for
-center, sigma and amplitude. To adjust peak positions/bounds or add new peaks, edit the
-TOML — no code changes needed.
-
-### Baseline (`baseline`)
-
-One of `iasls`, `airpls`, `iarpls` (all from RamanSPy). The peak-fitting entry points
-default to `iasls`.
-
-### Region (`region`)
-
-Named wavenumber ranges from
-[`hc_raman/spectrum_config/spectrum_regions.toml`](hc_raman/spectrum_config/spectrum_regions.toml),
-e.g. `first_order` (900–2000 cm⁻¹, the default for fitting), `second_order`, `full`, etc.
-Peak fitting is currently configured for the `first_order` region. `g_band` (1500–1620),
-`d_band` (1300–1390) and `mid` (1850–2150, signal-free) are used by
-`get_quality_metrics`.
-
 ## API reference
 
-- `preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iarpls', ...)` —
-  full preprocessing pipeline (normalised + cropped) used by the fitting functions.
+- `preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iasls', ...)` —
+  full preprocessing pipeline (baseline corrected, normalised, cropped) used by the
+  fitting functions.
 - `conv_preprocess(...)` — preprocessing for the conventional ratio (no normalisation,
   optional crop).
 - `get_quality_metrics(file_path=None, wavenumber=None, intensity=None, ...)` — measurement
   quality metrics (signal-to-noise, background magnitude) as a dict.
-- `peak_fit_from_file(...)` / `peak_fit_from_data(...)` — preprocess + fit; return an
-  lmfit result.
+- `peak_fit_sample_from_data(measurements, ...)` /
+  `peak_fit_sample_from_files(file_paths, ...)` — preprocess + fit a whole sample;
+  return `(result, summary)`.
+- `fit_sample(spectra, mode, region)` — the sample fit on already preprocessed spectra.
+- `peak_fit_from_file(...)` / `peak_fit_from_data(...)` — preprocess + fit one spectrum;
+  return an lmfit result.
 - `get_ratio_from_file(...)` — conventional I_D/I_G without fitting.
 - `get_id_ig(result)` — extract I_D/I_G from a fitted result.
-- `fit_model(x, y, mode, region)` / `build_lmfit_model(mode, region)` — lower-level
-  fitting helpers.
+- `params_at_bound(result)` — parameters left resting on a bound.
+- `fit_model(x, y, mode, region, procedure, n_starts, seed)` /
+  `build_lmfit_model(mode, region)` — lower-level fitting helpers.

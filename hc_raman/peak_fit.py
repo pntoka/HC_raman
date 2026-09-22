@@ -3,13 +3,11 @@ import numpy as np
 from hc_raman.utils import get_spectrum_region
 import tomllib
 from lmfit import Parameters, minimize
-from lmfit.models import (LorentzianModel, GaussianModel, VoigtModel,
-                          PseudoVoigtModel, LinearModel, ConstantModel)
+from lmfit.models import (LorentzianModel, GaussianModel, LinearModel, ConstantModel)
 from hc_raman.preprocess import preprocess, conv_preprocess
 import matplotlib.pyplot as plt
 
-_PEAK_MODELS = {"Lorentzian": LorentzianModel, "Gaussian": GaussianModel,
-                "Voigt": VoigtModel, "PseudoVoigt": PseudoVoigtModel}
+_PEAK_MODELS = {"Lorentzian": LorentzianModel, "Gaussian": GaussianModel}
 
 # Background shapes a region may declare, with the lmfit parameters each one takes.
 _BACKGROUND_MODELS = {"constant": (ConstantModel, ("c",)),
