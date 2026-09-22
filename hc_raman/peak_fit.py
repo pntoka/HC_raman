@@ -354,6 +354,43 @@ def get_id_ig(result):
     return float(p['D_amplitude'].value / p['G_amplitude'].value)
 
 
+def _r2_beyssac(params):
+    """A_D / (A_D + A_G + A_D2) for one measurement; A_D2 is 0 when D2 is not fitted."""
+    d, g = params['D_amplitude'].value, params['G_amplitude'].value
+    d2 = params['D2_amplitude'].value if 'D2_amplitude' in params else 0.0
+    return float(d / (d + g + d2))
+
+
+def get_raman_parameters(result):
+    """
+    Beyssac R2 and D band FWHM from a single-spectrum or a sample fit.
+
+    Parameters
+    ----------
+    result : lmfit.model.ModelResult or lmfit.minimizer.MinimizerResult
+        The result of :func:`fit_model` / ``peak_fit_from_*``, or the result (first
+        element) of :func:`fit_sample` / ``peak_fit_sample_from_*``.
+
+    Returns
+    -------
+    dict
+        ``r2_beyssac``
+            A_D / (A_D + A_G + A_D2), the R2 parameter of Beyssac et al. A float for a
+            single-spectrum fit; for a sample fit, a list with one value per
+            measurement, in the order the spectra were given.
+        ``D_fwhm``
+            FWHM of the D band in cm-1. A single float in both cases: in a sample fit
+            the band shapes are shared by every measurement.
+    """
+    if hasattr(result, "spectra"):
+        per_spectrum = [_spectrum_params(result.model, result.params, index)
+                        for index in range(len(result.spectra))]
+        return {"r2_beyssac": [_r2_beyssac(p) for p in per_spectrum],
+                "D_fwhm": float(per_spectrum[0]['D_fwhm'].value)}
+    return {"r2_beyssac": _r2_beyssac(result.params),
+            "D_fwhm": float(result.params['D_fwhm'].value)}
+
+
 def _is_per_spectrum(name):
     """Band areas and the background may differ between measurements; shapes may not."""
     return name.endswith("_amplitude") or name.startswith(BACKGROUND_PREFIX)

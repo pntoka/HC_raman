@@ -255,6 +255,8 @@ curve the fit will actually see.
   return an lmfit result.
 - `get_ratio_from_file(...)` — conventional I_D/I_G without fitting.
 - `get_id_ig(result)` — extract I_D/I_G from a fitted result.
+- `get_raman_parameters(result)` — Beyssac R2 and D band FWHM from a single or sample
+  fit; for a sample fit R2 is a list, one per measurement, and D FWHM is the shared value.
 - `params_at_bound(result)` — parameters left resting on a bound.
 - `fit_model(x, y, mode, region, procedure, n_starts, seed)` /
   `build_lmfit_model(mode, region)` — lower-level fitting helpers.
