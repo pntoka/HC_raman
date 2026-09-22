@@ -50,7 +50,8 @@ def preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iasls'
         data = load_raman_file(file_path)
         wavenumber, intensity = get_wavenumber_intensity(data)
 
-    raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
+    raman_spectrum = ramanspy.Spectrum(np.asarray(intensity, dtype=np.float64), 
+                                       np.asarray(wavenumber, dtype=np.float64))
     spectrum_regions = get_spectrum_region()
     roi = spectrum_regions["spectrum"]["regions"][region]
     if region == "first_order":
@@ -92,7 +93,8 @@ def conv_preprocess(file_path=None, wavenumber=None, intensity=None, baseline='i
         data = load_raman_file(file_path)
         wavenumber, intensity = get_wavenumber_intensity(data)
 
-    raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
+    raman_spectrum = ramanspy.Spectrum(np.asarray(intensity, dtype=np.float64), 
+                                           np.asarray(wavenumber, dtype=np.float64))
 
     pipeline_list = [
         ramanspy.preprocessing.despike.WhitakerHayes(),
@@ -248,7 +250,8 @@ def get_quality_metrics(file_path=None, wavenumber=None, intensity=None, baselin
         data = load_raman_file(file_path)
         wavenumber, intensity = get_wavenumber_intensity(data)
 
-    raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
+    raman_spectrum = ramanspy.Spectrum(np.asarray(intensity, dtype=np.float64), 
+                                           np.asarray(wavenumber, dtype=np.float64))
     despiked = ramanspy.preprocessing.despike.WhitakerHayes().apply(raman_spectrum)
     denoised = ramanspy.preprocessing.denoise.SavGol(
         window_length=window_length, polyorder=polyorder).apply(despiked)
