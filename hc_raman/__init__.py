@@ -5,6 +5,10 @@ from hc_raman.peak_fit import (
     get_ratio_from_file,
     get_id_ig,
     fit_model,
+    fit_sample,
+    peak_fit_sample_from_data,
+    peak_fit_sample_from_files,
+    params_at_bound,
     build_lmfit_model,
     get_peaks_config,
 )
@@ -18,6 +22,10 @@ __all__ = [
     "get_ratio_from_file",
     "get_id_ig",
     "fit_model",
+    "fit_sample",
+    "peak_fit_sample_from_data",
+    "peak_fit_sample_from_files",
+    "params_at_bound",
     "build_lmfit_model",
     "get_peaks_config",
 ]

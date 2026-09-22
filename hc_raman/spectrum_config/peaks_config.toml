@@ -24,9 +24,9 @@ Für G: 1580-1590 D5 und D2 weiß ich nicht
 peak_name = "G"
 peak_type = "Lorentzian"
 [first_order.peaks.G.param_hints]
-center = {value = 1580, min = 1545, max = 1610}
-sigma = {value = 30, min = 5, max = 150}
-amplitude = {value = 100, min = 1e-05, max = 500}
+center = {value = 1590, min = 1570, max = 1605}
+sigma = {value = 35, min = 22.5, max = 57.5}
+amplitude = {value = 35, min = 0, max = 500}
 
 
 [first_order.peaks.D]
@@ -39,9 +39,9 @@ Für D1: 1340-1350
 peak_name = "D"
 peak_type = "Lorentzian"
 [first_order.peaks.D.param_hints]
-center = {value = 1350, min = 1330, max = 1380}
-sigma = {value = 35, min = 1, max = 150}
-amplitude = {value = 120, min = 1e-05, max = 500}
+center = {value = 1350, min = 1335, max = 1365}
+sigma = {value = 85, min = 45, max = 150}
+amplitude = {value = 85, min = 0, max = 500}
 
 [first_order.peaks.D2]
 docstring = """
@@ -52,9 +52,9 @@ j.molstruc.2010.12.065
 peak_name = "D2"
 peak_type = "Lorentzian"
 [first_order.peaks.D2.param_hints]
-center = {value = 1620, min = 1592, max = 1635}
-sigma = {value = 30, min = 5, max = 150}
-amplitude = {value = 35, min = 5, max = 500}
+center = {value = 1615, vary = false}
+sigma = {value = 22.5, vary = false} 
+amplitude = {value = 15, min = 0, max = 500}
 
 
 [first_order.peaks.D3]
@@ -64,11 +64,11 @@ For amorphous carbon (Gaussian[26]or Lorentzian[3,18,27]line shape).
 Für D3: 1495-1515
 """
 peak_name = "D3"
-peak_type = "Lorentzian"
+peak_type = "Gaussian"
 [first_order.peaks.D3.param_hints]
-center = {value = 1500, min = 1450, max = 1550}
-sigma = {value = 25, min = 1, max = 150}
-amplitude = {value = 25, min = 1e-02, max = 500}
+center = {value = 1510, min = 1480, max = 1545}
+sigma = {value = 76.4, vary = false}
+amplitude = {value = 15, min = 0, max = 500}
 
 [first_order.peaks.D4]
 docstring = """
@@ -81,9 +81,9 @@ Für D4: 1185-1210, but depends on if there is D5 or not.
 peak_name = "D4"
 peak_type = "Lorentzian"
 [first_order.peaks.D4.param_hints]
-center = {value = 1230, min = 1180, max = 1310}
-sigma = {value = 40, min = 1, max = 200}
-amplitude = {value = 20, min = 1e-02, max = 200}
+center = {value = 1190, vary = false}
+sigma = {value = 110, vary = false}
+amplitude = {value = 30, min = 0, max = 500}
 
 [first_order.peaks.D5]
 docstring = """
@@ -110,3 +110,8 @@ is_substrate = true
 center = {value = 960, min = 900, max = 980}
 sigma = {value = 10, min = 0, max = 150}
 amplitude = {value = 10, min = 0, max = 200}
+
+[first_order.background]
+type = "linear"
+slope = {value = 0, min = -1e-3, max = 1e-3}
+intercept = {value = 0, min = -0.5,  max = 0.5}

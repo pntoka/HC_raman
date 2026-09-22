@@ -10,17 +10,16 @@ MIN_REGION_POINTS = 10
 
 def _build_baseline_element(baseline):
     """Map a baseline name to a ramanspy baseline preprocessing element."""
-    if baseline == "iasls":
-        return ramanspy.preprocessing.baseline.IASLS()
-    elif baseline == "airpls":
-        return ramanspy.preprocessing.baseline.AIRPLS()
-    elif baseline == "iarpls":
-        return ramanspy.preprocessing.baseline.IARPLS()
-    raise ValueError(f"Unknown baseline '{baseline}'. Use 'iasls', 'airpls' or 'iarpls'.")
+    return {
+            "iasls": ramanspy.preprocessing.baseline.IASLS,
+            "airpls": ramanspy.preprocessing.baseline.AIRPLS,
+            "iarpls": ramanspy.preprocessing.baseline.IARPLS,
+            "asls": ramanspy.preprocessing.baseline.ASLS,
+        }[baseline]()
 
 
 def preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iasls',
-               window_length=11, polyorder=3, region="first_order"):
+               window_length=21, polyorder=3, region="first_order"):
     """
     Preprocess a Raman spectrum for peak fitting using RamanSPy.
 
@@ -54,13 +53,17 @@ def preprocess(file_path=None, wavenumber=None, intensity=None, baseline='iasls'
     raman_spectrum = ramanspy.Spectrum(intensity, wavenumber)
     spectrum_regions = get_spectrum_region()
     roi = spectrum_regions["spectrum"]["regions"][region]
+    if region == "first_order":
+        baseline_region = spectrum_regions["spectrum"]['regions']['baseline_window']
     region_val = (roi["min"], roi["max"])
+    baseline_region_val = (baseline_region["min"], baseline_region["max"])
 
     preprocessing_pipeline = ramanspy.preprocessing.Pipeline([
         ramanspy.preprocessing.despike.WhitakerHayes(),
         ramanspy.preprocessing.denoise.SavGol(window_length=window_length, polyorder=polyorder),
-        ramanspy.preprocessing.normalise.MinMax(),
+        ramanspy.preprocessing.misc.Cropper(region=baseline_region_val),
         _build_baseline_element(baseline),
+        ramanspy.preprocessing.normalise.MinMax(),
         ramanspy.preprocessing.misc.Cropper(region=region_val)
     ])
     data = preprocessing_pipeline.apply(raman_spectrum)
