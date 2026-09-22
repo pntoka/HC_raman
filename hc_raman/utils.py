@@ -1,6 +1,7 @@
 from rsciio.renishaw import file_reader
 import os
 import tomllib
+import numpy as np
 
 
 def load_raman_file(file_path):
@@ -39,8 +40,8 @@ def get_wavenumber_intensity(data):
         Intensity values.
     """
     # Extract the wavenumber and intensity
-    wavenumber = data[0]["axes"][0]["axis"]
-    intensity = data[0]["data"]
+    wavenumber = np.asarray(data[0]["axes"][0]["axis"], dtype=np.float64)
+    intensity = np.asarray(data[0]["data"], dtytpe=np.float64)
     return wavenumber, intensity
 
 
